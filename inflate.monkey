@@ -220,7 +220,7 @@ Private
 			sum += t.Get_lTable(i)
 		Next
 		
-		' Create code -> sumbol translation table (Symbols sorted by code):
+		' Create code -> symbol translation table (Symbols sorted by code):
 		For Local i:= 0 Until num
 			Local length:= Get_Byte(lengths, (i + offset))
 			
