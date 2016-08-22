@@ -151,7 +151,7 @@ Private
 	' This builds fixed huffman trees.
 	Function inf_build_fixed_trees:Void(lt:InfTree, dt:InfTree)
 		' Build fixed length tree.
-		For Local i:= 0 Until 7 ' 8 bits.
+		For Local i:= 0 Until 7
 			lt.Set_lTable(i, 0)
 		Next
 		
@@ -191,7 +191,7 @@ Private
 	' 'lengths' is a buffer containing byte values.
 	Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int) ' offset:Int=0 ' Size_t ' Int[] ' Byte[]
 		' Optimization potential; dynamic allocation.
-		Local offs:= New Int[InfTree.LTABLE_LENGTH] ' t.lTable_Length ' 16
+		Local offs:= New Int[InfTree.LTABLE_LENGTH] ' t.lTable_Length ' 16 ' UShort[]
 		
 		' Clear code length count table:
 		For Local i:= 0 Until InfTree.LTABLE_LENGTH ' offs.Length ' 16
@@ -199,13 +199,13 @@ Private
 		Next
 		
 		' Scan symbol length, and sum code length counts:
-		For Local i:= 0 Until num
-			Local position:= Get_Byte(lengths, (i + offset))
+		For Local i:= offset Until (num+offset)
+			Local length:= Get_Byte(lengths, i)
 			
-			Local currentValue:= t.Get_lTable(position)
+			Local newValue:= (t.Get_lTable(length) + 1)
 			
 			' Increment by one.
-			t.Set_lTable(position, (currentValue + 1))
+			t.Set_lTable(length, newValue)
 		Next
 		
 		' Set the first entry to zero.
@@ -215,7 +215,7 @@ Private
 		Local sum:= 0
 		
 		For Local i:= 0 Until offs.Length ' 16
-			offs[i] = sum ' & $FFFF
+			offs[i] = sum ' (sum & $FFFF)
 			
 			sum += t.Get_lTable(i)
 		Next
@@ -224,12 +224,12 @@ Private
 		For Local i:= 0 Until num
 			Local length:= Get_Byte(lengths, (i + offset))
 			
-			If (length) Then ' > 0
-				Local offset:= offs[length]
+			If (length > 0) Then
+				Local off:= offs[length]
 				
-				t.Set_transTable(offset, i)
+				t.Set_transTable(off, i)
 				
-				offs[length] += 1 ' offset
+				offs[length] += 1 ' off
 			Endif
 		Next
 	End
@@ -237,9 +237,7 @@ Private
 	' ////// Decode functions \\\\\\
 	
 	' Get one bit from source stream.
-	Function inf_getbit:Int(d:InfSession) ' Bool
-		Local bit:Int '  UInt
-		
+	Function inf_getbit:Int(d:InfSession) ' Bool ' UInt
 		' Check if 'tag' is empty:
 		Local bitCount:= d.bitCount
 		
@@ -253,32 +251,34 @@ Private
 		Endif
 		
 		' Shift bit out of tag:
-		bit = d.tag & $01
+		Local bit:= (d.tag & $01) ' (0-1) ' UInt
 		
-		d.tag Shr= 1 ' Lsr(d.tag, 1)
+		d.tag = Lsr(d.tag, 1) ' Shr= 1
 		
 		Return bit
 	End
 	
 	' Read a 'num' bit-value from a stream and add 'base'.
 	Function inf_read_bits:Int(d:InfSession, num:Int, base:Int) ' UInt
-		Local value:= 0 ' UInt
+		If (Not num) Then
+			Return base
+		Endif
 		
 		' Read 'num' bits:
-		If (num) Then ' > 0
-			Local limit:= (1 Shl num) ' UInt ' Lsl(1, num)
+		Local limit:= Lsl(1, num) ' (1 Shl num) ' Pow(2, num) ' UInt
+		
+		Local mask:Int = 1 ' UInt
+		
+		Local value:= 0 ' UInt
+		
+		While (mask < limit)
+			If (inf_getbit(d)) Then
+				value += mask
+			Endif
 			
-			Local mask:Int = 1 ' UInt
-			
-			While (mask < limit)
-				If (inf_getbit(d)) Then
-					value += mask
-				Endif
-				
-				mask *= 2
-				'mask = Lsl(mask, 1)
-			Wend
-		Endif
+			mask *= 2
+			'mask = Lsl(mask, 1)
+		Wend
 		
 		Return (value + base)
 	End
@@ -290,7 +290,7 @@ Private
 		Local len:= 0
 		
 		Repeat
-			cur = (2*cur + inf_getbit(d))
+			cur = (2 * cur + inf_getbit(d))
 			
 			len += 1
 			
@@ -310,6 +310,9 @@ Private
 		' Allocate a temporary length-buffer.
 		Local lengths:= New DataBuffer(288+32) ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[]
 		
+		' Set all entries of this buffer to zero.
+		'SetBuffer(lengths, 0)
+		
 		Local hlit:Int, hdist:Int, hclen:Int ' UInt, ...
 		
 		' Get 5-bit HLIT. (257-286)
@@ -321,7 +324,7 @@ Private
 		' Get 4-bit HCLEN. (4-19)
 		hclen = inf_read_bits(d, 4, 4)
 		
-		For Local i:= 0 Until 19
+		For Local i:= 0 Until 19 ' clcidx.Length
 			Set_Byte(lengths, i, 0)
 		Next
 		
@@ -336,14 +339,18 @@ Private
 		Next
 		
 		' Build code length tree, temporarily use length tree.
-		inf_build_tree(lt, lengths, 19, 0) ' clcidx.Length
+		Local code_tree:= lt ' New InfTree()
+		
+		inf_build_tree(code_tree, lengths, 19, 0) ' clcidx.Length
 		
 		' Decode code lengths for the dynamic trees:
 		Local num:= 0
 		
-		While (num < (hlit + hdist))
+		Local max_num:= (hlit + hdist)
+		
+		While (num < max_num)
 			' Load a symbol.
-			Local sym:= inf_decode_symbol(d, lt)
+			Local sym:= inf_decode_symbol(d, code_tree)
 			
 			Select (sym)
 				Case 16
@@ -352,7 +359,7 @@ Private
 					
 					Local length:= inf_read_bits(d, 2, 3)
 					
-					While (length) ' > 0
+					While (length > 0)
 						Set_Byte(lengths, num, prev)
 						
 						num += 1
@@ -363,7 +370,7 @@ Private
 					' Report code length 0 for 3-10 times (Read 3 bits):
 					Local length:= inf_read_bits(d, 3, 3)
 					
-					While (length) ' > 0
+					While (length > 0)
 						Set_Byte(lengths, num, 0)
 						
 						num += 1
@@ -374,7 +381,7 @@ Private
 					' Report code length 0 for 11-138 times (Read 7 bits):
 					Local length:= inf_read_bits(d, 7, 11)
 					
-					While (length) ' > 0
+					While (length > 0)
 						Set_Byte(lengths, num, 0)
 						
 						num += 1
@@ -400,11 +407,13 @@ Private
 	
 	' Given a stream and two trees, inflate a block of data.
 	Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree, dt:InfTree)
+		'DebugStop()
+		
 		If (d.curlen = 0) Then
 			Local sym:= inf_decode_symbol(d, lt)
 			
 			#If REGAL_INFLATE_DEBUG_OUTPUT
-				'Print("Huffman symbol: " + sym)
+				Print("Huffman symbol: " + sym)
 			#End
 			
 			' Literal value:
@@ -426,12 +435,12 @@ Private
 			sym -= 257
 			
 			' Possibly get more bits from length code.
-			d.curlen = inf_read_bits(d, Get_Byte(context.length_bits, sym), Get_Short(context.length_base, sym)) ''''
+			d.curlen = inf_read_bits(d, Get_Byte(context.length_bits, sym), Get_Short(context.length_base, sym))
 			
 			dist = inf_decode_symbol(d, dt)
 			
 			' Possibly get more bits from distance code.
-			offs = inf_read_bits(d, Get_Byte(context.dist_bits, dist), Get_Short(context.dist_base, dist));
+			offs = inf_read_bits(d, Get_Byte(context.dist_bits, dist), Get_Short(context.dist_base, dist))
 			
 			If (d.dict_ring) Then
 				d.lzOff = (d.dict_idx - offs)
@@ -446,7 +455,9 @@ Private
 		
 		' Copy the next byte from the dictionary entry requested:
 		If (d.dict_ring) Then
-			d.Put(Get_Byte(d.dict_ring, d.lzOff))
+			Local value:= Get_Byte(d.dict_ring, d.lzOff)
+			
+			d.Put(value)
 			
 			d.lzOff += 1
 			
@@ -582,7 +593,6 @@ Private
 	End
 	
 	' Classes:
-	
 	Class InfTree
 		Private
 			' Constant variable(s):
@@ -591,11 +601,23 @@ Private
 		Public
 			' Methods:
 			Method Get_lTable:Int(index:Int) ' Short
-				Return Get_Short(lTable, index)
+				Local value:= Get_Short(lTable, index)
+				
+				'Print("Get|LTABLE[" + index + "] = " + value)
+				
+				'Return Get_Short(lTable, index)
+				
+				Return value
 			End
 			
 			Method Get_transTable:Int(index:Int) ' Short
-				Return Get_Short(transTable, index)
+				Local value:= Get_Short(transTable, index)
+				
+				'Print("Get|TRANSTABLE[" + index + "] = " + value)
+				
+				'Return Get_Short(transTable, index)
+				
+				Return value
 			End
 			
 			Method Set_lTable:Void(index:Int, value:Int) ' Short
@@ -678,14 +700,18 @@ Public
 			' This writes a byte to the 'destination', and
 			' stores that value in an internal ring-buffer, if available.
 			Method Put:Void(value:Int)
+				Print("Put: " + value)
+				
+				'DebugStop()
+				
 				value = WriteByte(value)
 				
 				If (dict_ring) Then ' <> Null
-					dict_ring.PokeByte(dict_idx, value)
+					Set_Byte(dict_ring, dict_idx, value)
 					
 					dict_idx += 1
 					
-					If (dict_idx = dict_size) Then
+					If (dict_idx = dict_size) Then ' >=
 						dict_idx = 0
 					Endif
 				Endif
@@ -871,8 +897,6 @@ Public
 			' Process the current block:
 			Select (d.bType)
 				Case 0
-					DebugStop()
-					
 					' "Inflate" uncompressed block.
 					res = inf_inflate_uncompressed_block(context, d)
 				Case 1, 2
@@ -897,7 +921,7 @@ Public
 				
 				Continue
 			Elseif (res <> INF_OK) Then
-				DebugStop()
+				'DebugStop()
 				
 				Return res
 			Endif
