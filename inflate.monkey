@@ -684,9 +684,27 @@ Public
 			End
 		Public
 			' Methods:
+			
+			' This seeks forward in the source-stream
+			' by the number of bytes specified.
+			Method SeekForward:Int(amount:Int)
+				Return SeekForward(amount)
+			End
+			
+			' Input wrappers:
+			Method ReadInt:Int()
+				Return (source.ReadInt() & $FFFFFFFF)
+			End
+			
+			Method ReadShort:Int()
+				Return (source.ReadShort() & $FFFF)
+			End
+			
 			Method ReadByte:Int()
 				Return (source.ReadByte() & $FF)
 			End
+			
+			' Output wrappers:
 			
 			' This directly writes a byte to the 'destination' stream.
 			Method WriteByte:Int(value:Int)
@@ -1051,4 +1069,74 @@ Public
 		data.checksum = 1
 		
 		Return cinfo ' Lsr(cmf, 4) ' Shr ' & $FF
+	End
+	
+	' This implementation is currently untested and may be unsafe.
+	Function InfParseGZipHeader:Int(d:InfSession)
+		' Constant variable(s):
+		
+		' Header flag-masks:
+		Const FTEXT:=		1
+		Const FHCRC:=		2
+		Const FEXTRA:=		4
+		Const FNAME:=		8
+		Const FCOMMENT:=	16
+		
+		' -- Check format -- '
+		
+		' Check the ID bytes:
+		If (d.ReadByte() <> $1F Or d.ReadByte() <> $8B) Then
+			Return INF_DATA_ERROR
+		Endif
+		
+		' Ensure the method used is deflate.
+		If (d.ReadByte() <> 8) Then
+			Return INF_DATA_ERROR
+		Endif
+		
+		' Get the flag-byte.
+		Local flg:= d.ReadByte()
+		
+		' Check that reserved bits are zero.
+		If ((flg & $E0)) Then
+			Return INF_DATA_ERROR
+		Endif
+		
+		' -- Find the start of the compressed data stream -- '
+		
+		' Skip the rest of the base-header (10 bytes total; 6 remaining).
+		d.SeekForward(6)
+		
+		' Skip extra data, if present:
+		If ((flg & FEXTRA)) Then
+			Local xlen:= d.ReadShort()
+			
+			d.SeekForward(xlen)
+		Endif
+		
+		' Skip the file-name, if present:
+		If ((flg & FNAME)) Then
+			' Skip the characters of the name by waiting for a null-character.
+			While (d.ReadByte() <> 0); Wend
+		Endif
+		
+		' Skip the file-comment, if present:
+		If ((flg & FCOMMENT)) Then
+			' Skip the characters of the comment as we
+			' did for the name; wait for a null-character.
+			While (d.ReadByte() <> 0); Wend
+		Endif
+		
+		' Check if the header says a CRC is present.
+		If ((flg & FHCRC)) Then
+			' This is currently ignored; a proper
+			' legitimacy-check may be added at a later date.
+			Local hcrc:= d.ReadShort()
+		Endif
+		
+		' Initialize the CRC32 checksum:
+		d.checksum_type = INF_CHECKSUM_CRC32
+		d.checksum = ~0
+		
+		Return INF_OK
 	End
