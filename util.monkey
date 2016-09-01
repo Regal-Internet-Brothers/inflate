@@ -10,9 +10,9 @@ Public
 	Import regal.byteorder
 	Import regal.ioutil.util
 	
-	Import regal.hash
-	'Import regal.hash.adler32
-	'Import regal.hash.crc32
+	Import regal.hash.adler32
+	Import regal.hash.crc32
+	Import regal.hash.external
 	
 	Import meta
 Private

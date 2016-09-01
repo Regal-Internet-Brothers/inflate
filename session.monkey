@@ -96,6 +96,11 @@ Class InfSession ' Final
 			#If REGAL_INFLATE_DEBUG_OUTPUT
 				Print("PUT: " + value + "   {Dest: " + destination.Position + ", Src: " + source.Position + "}")
 				
+				'If (destination.Position = 1) Then
+				If (value = 0) Then
+					DebugStop()
+				Endif
+				
 				'DebugStop()
 			#End
 			

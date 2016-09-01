@@ -4,6 +4,9 @@ Strict
 Import config
 
 Private
+	' Testing related:
+	'Import regal.util.memory
+	
 	Import util
 	Import tree
 	Import meta
@@ -306,7 +309,11 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	Wend
 	
 	' Build dynamic treee:
+	
+	' Build literal lengths.
 	inf_build_tree(lt, lengths, hlit, 0)
+	
+	' Build distance codes.
 	inf_build_tree(dt, lengths, hdist, hlit)
 	
 	' With the trees built, discard our temporary length-buffer.
@@ -341,11 +348,6 @@ Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree
 			#End
 			
 			d.Put(sym)
-			
-			'If (d.destination.Position = 1) Then
-			If (sym = 0) Then
-				DebugStop()
-			Endif
 			
 			Return INF_OK
 		Endif

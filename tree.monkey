@@ -40,10 +40,10 @@ Class InfTree
 		End
 		
 		Method Set_transTable:Void(index:Int, value:Int) ' Short
-			If (index = 13) Then
-				Print("Setting index 13, value: " + value)
+			If (index = 20) Then ' 13
+				Print("Setting index 20, value: " + value)
 				
-				DebugStop()
+				'DebugStop()
 			Endif
 			
 			Set_Short(transTable, index, value)
