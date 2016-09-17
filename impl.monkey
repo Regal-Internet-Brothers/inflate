@@ -28,23 +28,23 @@ Global clcidx:Int[] = [
 ' ////// Utility functions \\\\\\
 
 ' This builds extra bits and base tables.
-Function inf_build_bits_base:Void(bits__bytes:DataBuffer, base__shorts:DataBuffer, delta:Int, first:Int)
+Function inf_build_bits_base:Void(bits:ByteArrayView, base:ShortArrayView, delta:Int, first:Int)
 	' Build bits table:
 	For Local i:= 0 Until delta
-		Set_Byte(bits__bytes, i, 0)
+		bits.Set(i, 0)
 	Next
 	
-	For Local i:= 0 Until (BIT_BASE_LENGTH - delta)
-		Set_Byte(bits__bytes, (i + delta), (i / delta))
+	For Local i:= 0 Until (InfContext.BIT_BASE_LENGTH - delta)
+		bits.Set((i + delta), (i / delta))
 	Next
 	
 	' Build base table:
 	Local sum:= first
 	
-	For Local i:= 0 Until BIT_BASE_LENGTH
-		Set_Short(base__shorts, i, sum)
+	For Local i:= 0 Until InfContext.BIT_BASE_LENGTH
+		base.Set(i, sum)
 		
-		sum += (1 Shl Get_Byte(bits__bytes, i)) ' Lsl(1, Get_Byte(bits__bytes, i))
+		sum += (1 Shl bits.Get(i)) ' Lsl(1, bits.Get(i)) ' GetUnsigned
 	Next
 End
 
@@ -392,12 +392,12 @@ Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree
 		sym -= 257
 		
 		' Possibly get more bits from length code.
-		d.curlen = inf_read_bits(d, Get_Byte(context.length_bits, sym), Get_Short(context.length_base, sym))
+		d.curlen = inf_read_bits(d, context.length_bits.Get(sym), context.length_base.Get(sym)) ' context.length_base.GetUnsigned(sym)
 		
 		Local dist:= inf_decode_symbol(d, dt)
 		
 		' Possibly get more bits from distance code.
-		Local offs:= inf_read_bits(d, Get_Byte(context.dist_bits, dist), Get_Short(context.dist_base, dist))
+		Local offs:= inf_read_bits(d, context.dist_bits.Get(dist), context.dist_base.Get(dist)) ' context.dist_base.GetUnsigned(dist)
 		
 		If (d.dict_ring) Then
 			d.lzOff = (d.dict_idx - offs)
@@ -412,7 +412,7 @@ Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree
 	
 	' Copy the next byte from the dictionary entry requested:
 	If (d.dict_ring) Then
-		Local value:= Get_Byte(d.dict_ring, d.lzOff)
+		Local value:= (d.dict_ring.PeekByte(d.lzOff) & $FF)
 		
 		d.Put(value)
 		

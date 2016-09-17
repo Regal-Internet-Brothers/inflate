@@ -107,7 +107,7 @@ Class InfSession ' Final
 			value = WriteByte(value)
 			
 			If (dict_ring) Then ' <> Null
-				Set_Byte(dict_ring, dict_idx, value)
+				dict_ring.PokeByte(dict_idx, value)
 				
 				dict_idx += 1
 				

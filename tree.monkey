@@ -2,8 +2,6 @@ Strict
 
 ' Imports:
 Private
-	Import regal.sizeof
-	
 	Import util
 Public
 
@@ -15,6 +13,6 @@ Class InfTree
 		Const TRANSTABLE_LENGTH:= 288 ' 286 ' 288 ' 256+32
 		
 		' Fields:
-		Field lTable:= New IntArrayView(LTABLE_LENGTH) ' ShortArrayView ' Short[]
-		Field transTable:= New IntArrayView(TRANSTABLE_LENGTH) ' ShortArrayView ' Short[]
+		Field lTable:= New ShortArrayView(LTABLE_LENGTH) ' IntArrayView ' Short[]
+		Field transTable:= New ShortArrayView(TRANSTABLE_LENGTH) ' IntArrayView ' Short[]
 End
