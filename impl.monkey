@@ -52,65 +52,65 @@ End
 Function inf_build_fixed_trees:Void(lt:InfTree, dt:InfTree)
 	' Build fixed length tree.
 	For Local i:= 0 Until 7
-		lt.Set_lTable(i, 0)
+		lt.lTable.Set(i, 0)
 	Next
 	
-	lt.Set_lTable(7, 24)
-	lt.Set_lTable(8, 152)
-	lt.Set_lTable(9, 112)
+	lt.lTable.Set(7, 24)
+	lt.lTable.Set(8, 152)
+	lt.lTable.Set(9, 112)
 	
 	For Local i:= 0 Until 24
-		lt.Set_transTable(i, (256 + i))
+		lt.transTable.Set(i, (256 + i))
 	Next
 	
 	For Local i:= 0 Until 144
-		lt.Set_transTable((24 + i), i)
+		lt.transTable.Set((24 + i), i)
 	Next
 	
 	For Local i:= 0 Until 8
-		lt.Set_transTable((24 + 144 + i), (280 + i))
+		lt.transTable.Set((24 + 144 + i), (280 + i))
 	Next
 	
 	For Local i:= 0 Until 112
-		lt.Set_transTable((24 + 144 + 8 + i), (144 + i))
+		lt.transTable.Set((24 + 144 + 8 + i), (144 + i))
 	Next
 	
 	' Build fixed distance tree:
 	For Local i:= 0 Until 5
-		dt.Set_lTable(i, 0)
+		dt.lTable.Set(i, 0)
 	Next
 	
-	dt.Set_lTable(5, 32)
+	dt.lTable.Set(5, 32)
 	
 	For Local i:= 0 Until 32 ' (InfTree.LTABLE_LENGTH * 2)
-		dt.Set_transTable(i, i)
+		dt.transTable.Set(i, i)
 	Next
 End
 
 ' Given an array of code lengths, build a tree.
 ' 'lengths' is a buffer containing byte values.
-Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[]
+Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[] ' ByteArrayView
 	' Optimization potential; dynamic allocation.
-	Local offs:= New Int[t.lTable_Length] ' InfTree.LTABLE_LENGTH ' 16 ' UShort[]
+	Local offs:= New Int[InfTree.LTABLE_LENGTH] ' 16 ' Short[] ' UShort[]
 	
 	' Clear the code lengths:
-	For Local i:= 0 Until t.lTable_Length ' InfTree.LTABLE_LENGTH ' offs.Length ' 16
-		t.Set_lTable(i, 0)
+	For Local i:= 0 Until InfTree.LTABLE_LENGTH ' t.lTable_Length ' offs.Length ' 16
+		t.lTable.Set(i, 0)
 	Next
 	
 	' Scan symbol length, and sum code length counts:
 	'For Local i:= offset Until (offset+num)
 	For Local i:= 0 Until num
-		Local length:= Get_Byte(lengths, (i + offset)) ' i
+		Local length:= lengths.Get(i + offset) ' i ' GetUnsigned
 		
-		Local newValue:= (t.Get_lTable(length) + 1)
+		Local newValue:= (t.lTable.Get(length) + 1) ' GetUnsigned
 		
 		' Increment by one.
-		t.Set_lTable(length, newValue)
+		t.lTable.Set(length, newValue)
 	Next
 	
 	' Set the first entry to zero.
-	t.Set_lTable(0, 0)
+	t.lTable.Set(0, 0)
 	
 	' Compute offset table for distribution sort:
 	Local sum:= 0
@@ -118,16 +118,16 @@ Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int,
 	For Local i:= 0 Until 16 ' offs.Length ' 1 Until offs.Length
 		offs[i] = sum ' (sum & $FFFF)
 		
-		sum += t.Get_lTable(i)
+		sum += t.lTable.Get(i) ' GetUnsigned
 	Next
 	
-	#If REGAL_INFLATE_DEBUG_OUTPUT
+	#Rem ' If REGAL_INFLATE_DEBUG_OUTPUT
 		Print("BEGIN")
 		
 		' Debugging related:
 		Local length_bytes:= New Int[lengths.Length-offset]
 		
-		lengths.PeekBytes(offset, length_bytes, 0, length_bytes.Length)
+		lengths.Data.PeekBytes(offset, length_bytes, 0, length_bytes.Length) ' PeekInts
 		
 		If (_dbg) Then
 			DebugStop()
@@ -136,7 +136,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int,
 	
 	' Create code -> symbol translation table (Symbols sorted by code):
 	For Local i:= 0 Until num
-		Local length:= Get_Byte(lengths, (i + offset)) ' 27 = index 7
+		Local length:= lengths.Get(i + offset) ' 27 = index 7 ' GetUnsigned
 		
 		'#If REGAL_INFLATE_DEBUG_OUTPUT
 			'Print("lengths[" + i + "]: " + length)
@@ -149,7 +149,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int,
 				Print("Offset Map: trans["+off+"] {len: "+length+"} = [i: "+i+"]")
 			#End
 			
-			t.Set_transTable(off, i, _dbg)
+			t.transTable.Set(off, i) ' _dbg
 			
 			offs[length] += 1 ' off
 		Endif
@@ -228,7 +228,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 		
 		len += 1
 		
-		Local offset:= t.Get_lTable(len)
+		Local offset:= t.lTable.Get(len) ' GetUnsigned
 		
 		sum += offset
 		cur -= offset
@@ -236,10 +236,12 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	
 	Local index:= (sum + cur)
 	
-	Local symbol:= t.Get_transTable(index)
+	Local symbol:= t.transTable.Get(index) ' GetUnsigned
 	
 	#If REGAL_INFLATE_DEBUG_OUTPUT
 		If (__dbg) Then
+			'DebugStop()
+			
 			Print("Retrieving symbol from trans[" + index + "] = {" + symbol + "}")
 		Endif
 	#End
@@ -252,10 +254,10 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Optimization potential; dynamic allocations:
 	
 	' Allocate a temporary length-buffer.
-	Local lengths:= New DataBuffer(286+32) ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
+	Local lengths:= New IntArrayView(286+32) ' ByteArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
 	
 	' Set all entries of this buffer to zero.
-	'SetBuffer(lengths, 0)
+	'SetBuffer(lengths.Data, 0)
 	
 	Local hlit:Int, hdist:Int, hclen:Int ' UInt, ...
 	
@@ -269,13 +271,13 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	hclen = inf_read_bits(d, 4, 4)
 	
 	For Local i:= 0 Until 19 ' clcidx.Length
-		Set_Byte(lengths, i, 0)
+		lengths.Set(i, 0)
 	Next
 	
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
 		' Read 3-bit code lengths. (0-7)
-		Set_Byte(lengths, clcidx[i], inf_read_bits(d, 3, 0))
+		lengths.Set(clcidx[i], inf_read_bits(d, 3, 0))
 	Next
 	
 	' Build code length tree, temporarily use length tree.
@@ -295,12 +297,12 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 		Select (sym)
 			Case 16
 				' Copy previous code length 3-6 times (Read 2 bits):
-				Local prev:= Get_Byte(lengths, (num - 1))
+				Local prev:= lengths.Get(num - 1)
 				
 				Local length:= inf_read_bits(d, 2, 3)
 				
 				While (length > 0)
-					Set_Byte(lengths, num, prev)
+					lengths.Set(num, prev)
 					
 					num += 1
 					
@@ -311,7 +313,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				Local length:= inf_read_bits(d, 3, 3)
 				
 				While (length > 0)
-					Set_Byte(lengths, num, 0)
+					lengths.Set(num, 0)
 					
 					num += 1
 					
@@ -322,14 +324,14 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				Local length:= inf_read_bits(d, 7, 11)
 				
 				While (length > 0)
-					Set_Byte(lengths, num, 0)
+					lengths.Set(num, 0)
 					
 					num += 1
 					
 					length -= 1
 				Wend
 			Default
-				Set_Byte(lengths, num, sym)
+				lengths.Set(num, sym)
 				
 				num += 1
 		End Select

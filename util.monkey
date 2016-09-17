@@ -8,6 +8,7 @@ Public
 	
 	Import regal.sizeof
 	Import regal.byteorder
+	Import regal.util.buffers
 	Import regal.ioutil.util
 	
 	Import regal.hash.adler32
