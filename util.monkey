@@ -21,7 +21,8 @@ Public
 
 ' Functions:
 Function Get_Short:Int(buffer:DataBuffer, index:Int) ' Short
-	Return ArrayGetShort(buffer, index)
+	'Return ArrayGetShort(buffer, index)
+	Return buffer.PeekShort(index * 2)
 End
 
 Function Get_Byte:Int(buffer:DataBuffer, index:Int) ' Byte
@@ -29,7 +30,9 @@ Function Get_Byte:Int(buffer:DataBuffer, index:Int) ' Byte
 End
 
 Function Set_Short:Void(buffer:DataBuffer, index:Int, value:Int) ' Short
-	ArraySetShort(buffer, index, value)
+	'ArraySetShort(buffer, index, value)
+	
+	buffer.PokeShort(index*2, value)
 End
 
 Function Set_Byte:Void(buffer:DataBuffer, index:Int, value:Int) ' Byte

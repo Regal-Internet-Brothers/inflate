@@ -63,7 +63,7 @@ Class InfSession ' Final
 		' This seeks forward in the source-stream
 		' by the number of bytes specified.
 		Method SeekForward:Int(amount:Int)
-			Return SeekForward(amount)
+			Return SeekForward(source, amount)
 		End
 		
 		' Input wrappers:

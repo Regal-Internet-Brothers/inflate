@@ -6,6 +6,7 @@ Import config
 Private
 	' Testing related:
 	'Import regal.util.memory
+	Import regal.util.generic
 	
 	Import util
 	Import tree
@@ -88,18 +89,19 @@ End
 
 ' Given an array of code lengths, build a tree.
 ' 'lengths' is a buffer containing byte values.
-Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int) ' offset:Int=0 ' Size_t ' Int[] ' Byte[]
+Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[]
 	' Optimization potential; dynamic allocation.
 	Local offs:= New Int[t.lTable_Length] ' InfTree.LTABLE_LENGTH ' 16 ' UShort[]
 	
-	' Clear code length count table:
+	' Clear the code lengths:
 	For Local i:= 0 Until t.lTable_Length ' InfTree.LTABLE_LENGTH ' offs.Length ' 16
 		t.Set_lTable(i, 0)
 	Next
 	
 	' Scan symbol length, and sum code length counts:
-	For Local i:= offset Until (num+offset)
-		Local length:= Get_Byte(lengths, i)
+	'For Local i:= offset Until (offset+num)
+	For Local i:= 0 Until num
+		Local length:= Get_Byte(lengths, (i + offset)) ' i
 		
 		Local newValue:= (t.Get_lTable(length) + 1)
 		
@@ -113,24 +115,53 @@ Function inf_build_tree:Void(t:InfTree, lengths:DataBuffer, num:Int, offset:Int)
 	' Compute offset table for distribution sort:
 	Local sum:= 0
 	
-	For Local i:= 0 Until offs.Length ' 16
+	For Local i:= 0 Until 16 ' offs.Length ' 1 Until offs.Length
 		offs[i] = sum ' (sum & $FFFF)
 		
 		sum += t.Get_lTable(i)
 	Next
 	
+	#If REGAL_INFLATE_DEBUG_OUTPUT
+		Print("BEGIN")
+		
+		' Debugging related:
+		Local length_bytes:= New Int[lengths.Length-offset]
+		
+		lengths.PeekBytes(offset, length_bytes, 0, length_bytes.Length)
+		
+		If (_dbg) Then
+			DebugStop()
+		Endif
+	#End
+	
 	' Create code -> symbol translation table (Symbols sorted by code):
 	For Local i:= 0 Until num
-		Local length:= Get_Byte(lengths, (i + offset))
+		Local length:= Get_Byte(lengths, (i + offset)) ' 27 = index 7
+		
+		'#If REGAL_INFLATE_DEBUG_OUTPUT
+			'Print("lengths[" + i + "]: " + length)
+		'#End
 		
 		If (length > 0) Then
 			Local off:= offs[length]
 			
-			t.Set_transTable(off, i)
+			#If REGAL_INFLATE_DEBUG_OUTPUT
+				Print("Offset Map: trans["+off+"] {len: "+length+"} = [i: "+i+"]")
+			#End
+			
+			t.Set_transTable(off, i, _dbg)
 			
 			offs[length] += 1 ' off
 		Endif
 	Next
+	
+	#If REGAL_INFLATE_DEBUG_OUTPUT
+		Print("END")
+		
+		If (_dbg) Then
+			DebugStop()
+		Endif
+	#End
 End
 
 ' ////// Decode functions \\\\\\
@@ -189,7 +220,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	Local len:= 0
 	
 	#If REGAL_INFLATE_DEBUG_OUTPUT
-		Print("Decoding symbol...")
+		'Print("Decoding symbol...")
 	#End
 	
 	Repeat
@@ -221,7 +252,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Optimization potential; dynamic allocations:
 	
 	' Allocate a temporary length-buffer.
-	Local lengths:= New DataBuffer(288+32) ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[]
+	Local lengths:= New DataBuffer(286+32) ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
 	
 	' Set all entries of this buffer to zero.
 	'SetBuffer(lengths, 0)
@@ -243,16 +274,12 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
-		' Get 3 bits code length. (0-7)
-		Local clen:= inf_read_bits(d, 3, 0)
-		
-		Local index:= clcidx[i]
-		
-		Set_Byte(lengths, index, clen)
+		' Read 3-bit code lengths. (0-7)
+		Set_Byte(lengths, clcidx[i], inf_read_bits(d, 3, 0))
 	Next
 	
 	' Build code length tree, temporarily use length tree.
-	Local code_tree:= lt ' New InfTree()
+	Local code_tree:= New InfTree() ' lt
 	
 	inf_build_tree(code_tree, lengths, 19, 0) ' clcidx.Length
 	
@@ -311,7 +338,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Build dynamic treee:
 	
 	' Build literal lengths.
-	inf_build_tree(lt, lengths, hlit, 0)
+	inf_build_tree(lt, lengths, hlit, 0, True) ' 1
 	
 	' Build distance codes.
 	inf_build_tree(dt, lengths, hdist, hlit)
@@ -324,21 +351,23 @@ End
 
 ' Given a stream and two trees, inflate a block of data.
 Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree, dt:InfTree)
-	'DebugStop()
-	
-	If (d.destination.Position = 1*284) Then
-		'DebugStop()
-	Endif
+	#If REGAL_INFLATE_DEBUG_OUTPUT
+		If (d.destination.Position > 256) Then ' 256 = 255 (Zero added for some reason)
+			'DebugStop()
+		Endif
+		
+		DebugStop()
+	#End
 	
 	If (d.curlen = 0) Then
 		#If REGAL_INFLATE_DEBUG_OUTPUT
-			Print("// Huffman symbol \\")
+			'Print("// Huffman symbol \\")
 		#End
 		
 		Local sym:= inf_decode_symbol(d, lt, True)
 		
 		#If REGAL_INFLATE_DEBUG_OUTPUT
-			'Print("Huffman symbol: " + sym)
+			Print("Huffman symbol: " + sym)
 		#End
 		
 		' Literal value:

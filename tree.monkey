@@ -12,11 +12,12 @@ Class InfTree
 	Private
 		' Constant variable(s):
 		Const LTABLE_LENGTH:= 16
-		Const TRANSTABLE_LENGTH:= 288 ' 256+32
+		Const TRANSTABLE_LENGTH:= 286 ' 288 ' 256+32
 	Public
 		' Methods:
 		Method Get_lTable:Int(index:Int) ' Short
-			Local value:= Get_Short(lTable, index)
+			'Local value:= Get_Short(lTable, index)
+			Local value:= lTable.PeekShort(index*SizeOf_Short)
 			
 			'Print("Get|LTABLE[" + index + "] = " + value)
 			
@@ -26,7 +27,8 @@ Class InfTree
 		End
 		
 		Method Get_transTable:Int(index:Int) ' Short
-			Local value:= Get_Short(transTable, index)
+			'Local value:= Get_Short(transTable, index)
+			Local value:= transTable.PeekShort(index*SizeOf_Short)
 			
 			'Print("Get|TRANSTABLE[" + index + "] = " + value)
 			
@@ -36,17 +38,21 @@ Class InfTree
 		End
 		
 		Method Set_lTable:Void(index:Int, value:Int) ' Short
-			Set_Short(lTable, index, value)
+			'Set_Short(lTable, index, value)
+			lTable.PokeShort(index*SizeOf_Short, value)
 		End
 		
-		Method Set_transTable:Void(index:Int, value:Int) ' Short
-			If (index = 20) Then ' 13
-				Print("Setting index 20, value: " + value)
-				
-				'DebugStop()
+		Method Set_transTable:Void(index:Int, value:Int, _dbg:Bool=False) ' Short
+			If (_dbg) Then
+				If (index = 20 Or index = 8) Then ' 13 (Custom)
+					Print("Setting index "+index+", value: " + value)
+					
+					'DebugStop()
+				Endif
 			Endif
 			
-			Set_Short(transTable, index, value)
+			'Set_Short(transTable, index, value)
+			transTable.PokeShort(index*SizeOf_Short, value)
 		End
 		
 		' Properties:
