@@ -10,7 +10,7 @@ Import regal.sizeof
 Import regal.byteorder
 Import regal.ioutil.util
 
-Import regal.util.buffers
+Import regal.util.bufferview
 'Import regal.util.memory
 
 Import regal.hash.adler32

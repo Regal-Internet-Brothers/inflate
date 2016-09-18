@@ -89,9 +89,9 @@ End
 
 ' Given an array of code lengths, build a tree.
 ' 'lengths' is a buffer containing byte values.
-Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[] ' ByteArrayView
+Function inf_build_tree:Void(t:InfTree, lengths:ByteArrayView, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[] ' IntArrayView
 	' Optimization potential; dynamic allocation.
-	Local offs:= New Int[InfTree.LTABLE_LENGTH] ' 16 ' Short[] ' UShort[]
+	Local offs:= New ShortArrayView(InfTree.LTABLE_LENGTH) ' New Int[InfTree.LTABLE_LENGTH] ' 16 ' Short[] ' UShort[]
 	
 	' Clear the code lengths:
 	For Local i:= 0 Until InfTree.LTABLE_LENGTH ' t.lTable_Length ' offs.Length ' 16
@@ -101,7 +101,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:In
 	' Scan symbol length, and sum code length counts:
 	'For Local i:= offset Until (offset+num)
 	For Local i:= 0 Until num
-		Local length:= lengths.Get(i + offset) ' i ' GetUnsigned
+		Local length:= lengths.GetUnsigned(i + offset) ' i ' Get
 		
 		Local newValue:= (t.lTable.Get(length) + 1) ' GetUnsigned
 		
@@ -116,7 +116,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:In
 	Local sum:= 0
 	
 	For Local i:= 0 Until 16 ' offs.Length ' 1 Until offs.Length
-		offs[i] = sum ' (sum & $FFFF)
+		offs.SetUnsigned(i, sum) ' Set
 		
 		sum += t.lTable.Get(i) ' GetUnsigned
 	Next
@@ -136,14 +136,14 @@ Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:In
 	
 	' Create code -> symbol translation table (Symbols sorted by code):
 	For Local i:= 0 Until num
-		Local length:= lengths.Get(i + offset) ' 27 = index 7 ' GetUnsigned
+		Local length:= lengths.GetUnsigned(i + offset) ' 27 = index 7 ' Get
 		
 		'#If REGAL_INFLATE_DEBUG_OUTPUT
 			'Print("lengths[" + i + "]: " + length)
 		'#End
 		
 		If (length > 0) Then
-			Local off:= offs[length]
+			Local off:= offs.Get(length) ' GetUnsigned
 			
 			#If REGAL_INFLATE_DEBUG_OUTPUT
 				Print("Offset Map: trans["+off+"] {len: "+length+"} = [i: "+i+"]")
@@ -151,7 +151,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:In
 			
 			t.transTable.Set(off, i) ' _dbg
 			
-			offs[length] += 1 ' off
+			offs.Increment(length) ' offs.SetUnsigned(length, (off + 1)) ' off
 		Endif
 	Next
 	
@@ -162,6 +162,9 @@ Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, offset:In
 			DebugStop()
 		Endif
 	#End
+	
+	' Manually discard the offset-buffer.
+	offs.Data.Discard()
 End
 
 ' ////// Decode functions \\\\\\
@@ -254,7 +257,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Optimization potential; dynamic allocations:
 	
 	' Allocate a temporary length-buffer.
-	Local lengths:= New IntArrayView(286+32) ' ByteArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
+	Local lengths:= New ByteArrayView(286+32) ' IntArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
 	
 	' Set all entries of this buffer to zero.
 	'SetBuffer(lengths.Data, 0)
@@ -297,7 +300,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 		Select (sym)
 			Case 16
 				' Copy previous code length 3-6 times (Read 2 bits):
-				Local prev:= lengths.Get(num - 1)
+				Local prev:= lengths.GetUnsigned(num - 1) ' Get
 				
 				Local length:= inf_read_bits(d, 2, 3)
 				
