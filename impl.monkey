@@ -169,53 +169,6 @@ End
 
 ' ////// Decode functions \\\\\\
 
-' Get one bit from source stream.
-Function inf_getbit:Int(d:InfSession) ' Bool ' UInt
-	' Check if 'tag' is empty:
-	Local bitCount:= d.bitCount
-	
-	d.bitCount -= 1
-	
-	If (Not bitCount) Then ' <= 0
-		' Load next tag:
-		d.tag = d.ReadByte()
-		
-		d.bitCount = 7 ' (Zero counts)
-	Endif
-	
-	' Shift bit out of tag:
-	Local bit:= (d.tag & $01) ' (0-1) ' UInt
-	
-	d.tag = Lsr(d.tag, 1) ' Shr= 1
-	
-	Return bit
-End
-
-' Read a 'num' bit-value from a stream and add 'base'.
-Function inf_read_bits:Int(d:InfSession, num:Int, base:Int) ' UInt
-	If (Not num) Then
-		Return base
-	Endif
-	
-	' Read 'num' bits:
-	Local limit:= Lsl(1, num) ' (1 Shl num) ' Pow(2, num) ' UInt
-	
-	Local mask:Int = 1 ' UInt
-	
-	Local value:= 0 ' UInt
-	
-	While (mask < limit)
-		If (inf_getbit(d)) Then
-			value += mask
-		Endif
-		
-		mask *= 2
-		'mask = Lsl(mask, 1)
-	Wend
-	
-	Return (value + base)
-End
-
 ' Given a data stream and a tree, decode a symbol.
 Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	Local sum:= 0
@@ -227,7 +180,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	#End
 	
 	Repeat
-		cur = (2 * cur + inf_getbit(d))
+		cur = ((2 * cur) + d.GetBit())
 		
 		len += 1
 		
@@ -267,13 +220,13 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	Local hlit:Int, hdist:Int, hclen:Int ' UInt, ...
 	
 	' Get 5-bit HLIT. (257-286)
-	hlit = inf_read_bits(d, 5, 257) ' 1
+	hlit = d.ReadBits(5, 257) ' 1
 	
 	' Get 5-bit HDIST. (1-32)
-	hdist = inf_read_bits(d, 5, 1)
+	hdist = d.ReadBits(5, 1)
 	
 	' Get 4-bit HCLEN. (4-19)
-	hclen = inf_read_bits(d, 4, 4)
+	hclen = d.ReadBits(4, 4)
 	
 	#If CONFIG <> "debug"
 		lengths.Clear(0, 19) ' clcidx.Length
@@ -282,7 +235,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
 		' Read 3-bit code lengths. (0-7)
-		lengths.Set(clcidx[i], inf_read_bits(d, 3, 0))
+		lengths.Set(clcidx[i], d.ReadBits(3, 0))
 	Next
 	
 	' Build code length tree, temporarily use length tree.
@@ -306,7 +259,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				' Copy previous code length 3-6 times (Read 2 bits):
 				Local prev:= lengths.GetUnsigned(num - 1) ' Get
 				
-				Local length:= inf_read_bits(d, 2, 3)
+				Local length:= d.ReadBits(2, 3)
 				
 				While (length > 0)
 					lengths.Set(num, prev)
@@ -317,7 +270,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				Wend
 			Case 17
 				' Report code length 0 for 3-10 times (Read 3 bits):
-				Local length:= inf_read_bits(d, 3, 3)
+				Local length:= d.ReadBits(3, 3)
 				
 				While (length > 0)
 					lengths.Set(num, 0)
@@ -328,7 +281,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				Wend
 			Case 18
 				' Report code length 0 for 11-138 times (Read 7 bits):
-				Local length:= inf_read_bits(d, 7, 11)
+				Local length:= d.ReadBits(7, 11)
 				
 				While (length > 0)
 					lengths.Set(num, 0)
@@ -399,12 +352,12 @@ Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree
 		sym -= 257
 		
 		' Possibly get more bits from length code.
-		d.curlen = inf_read_bits(d, context.length_bits.Get(sym), context.length_base.Get(sym)) ' context.length_base.GetUnsigned(sym)
+		d.curlen = d.ReadBits(context.length_bits.Get(sym), context.length_base.Get(sym)) ' context.length_base.GetUnsigned(sym)
 		
 		Local dist:= inf_decode_symbol(d, dt)
 		
 		' Possibly get more bits from distance code.
-		Local offs:= inf_read_bits(d, context.dist_bits.Get(dist), context.dist_base.Get(dist)) ' context.dist_base.GetUnsigned(dist)
+		Local offs:= d.ReadBits(context.dist_bits.Get(dist), context.dist_base.Get(dist)) ' context.dist_base.GetUnsigned(dist)
 		
 		If (d.dict_ring) Then
 			d.lzOff = (d.dict_idx - offs)
@@ -490,10 +443,10 @@ End
 ' Extensions:
 Function inf_begin_block:Void(d:InfSession)
 	' Read the final block flag.
-	d.bFinal = inf_getbit(d) ' > 0
+	d.bFinal = d.GetBit() ' > 0
 	
 	' Read the block type. (2 bits)
-	d.bType = inf_read_bits(d, 2, 0)
+	d.bType = d.ReadBits(2, 0)
 	
 	#If REGAL_INFLATE_DEBUG_OUTPUT
 		Print("Started a new block { Type: " + d.bType + ", Final: " + d.bFinal + " }")

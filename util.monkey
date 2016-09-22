@@ -11,7 +11,7 @@ Import regal.byteorder
 Import regal.ioutil.util
 
 Import regal.util.bufferview
-'Import regal.util.memory
+Import regal.util.memory
 
 Import regal.hash.adler32
 Import regal.hash.crc32

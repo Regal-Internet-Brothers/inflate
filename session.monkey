@@ -67,6 +67,8 @@ Class InfSession ' Final
 		End
 		
 		' Input wrappers:
+		
+		' NOTE: These do not change the current bit-store. (See 'tag' for details)
 		Method ReadInt:Int()
 			Return (source.ReadInt() & $FFFFFFFF)
 		End
@@ -77,6 +79,52 @@ Class InfSession ' Final
 		
 		Method ReadByte:Int()
 			Return (source.ReadByte() & $FF)
+		End
+		
+		' This retrieves a bit from the 'source', reading forward as needed.
+		' For raw read operations, see 'ReadByte' and co.
+		Method GetBit:Int()
+			If (Self.bitCount <= 0) Then
+				' Load next tag:
+				Self.tag = ReadByte()
+				
+				Self.bitCount = 7 ' 8
+			Else
+				' Subtract from the internal bit-count.
+				Self.bitCount -= 1
+			Endif
+			
+			' Shift bit out of tag:
+			Local bit:= (Self.tag & $01) ' (0-1) ' UInt
+			
+			Self.tag = Lsr(Self.tag, 1) ' Shr= 1
+			
+			Return bit
+		End
+		
+		' Read 'num' bits from 'source', then add 'base'.
+		Method ReadBits:Int(num:Int, base:Int) ' UInt
+			If (Not num) Then
+				Return base
+			Endif
+			
+			' Read 'num' bits:
+			Local limit:= Lsl(1, num) ' (1 Shl num) ' Pow(2, num) ' UInt
+			
+			Local mask:Int = 1 ' UInt
+			
+			Local value:= 0 ' UInt
+			
+			While (mask < limit)
+				If (GetBit()) Then
+					value += mask
+				Endif
+				
+				mask *= 2
+				'mask = Lsl(mask, 1)
+			Wend
+			
+			Return (value + base)
 		End
 		
 		' Output wrappers:
@@ -191,7 +239,11 @@ Class InfSession ' Final
 		#End
 	Private ' Protected
 		' Fields:
-		Field tag:Int = 0
+		
+		' This is used to store the current byte's remaining bits.
+		Field tag:Int = 0 ' UInt
+		
+		' This is used to keep track of how many bits are stored within 'tag'.
 		Field bitCount:Int = 0
 		
 		' Total output size.
