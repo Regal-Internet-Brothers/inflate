@@ -103,7 +103,7 @@ Function inf_build_tree:Void(t:InfTree, lengths:ByteArrayView, num:Int, offset:I
 	For Local i:= 0 Until num
 		Local length:= lengths.GetUnsigned(i + offset) ' i ' Get
 		
-		Local newValue:= (t.lTable.Get(length) + 1) ' GetUnsigned
+		Local newValue:= (t.lTable.GetUnsigned(length) + 1) ' GetUnsigned
 		
 		' Increment by one.
 		t.lTable.Set(length, newValue)
@@ -115,10 +115,10 @@ Function inf_build_tree:Void(t:InfTree, lengths:ByteArrayView, num:Int, offset:I
 	' Compute offset table for distribution sort:
 	Local sum:= 0
 	
-	For Local i:= 0 Until 16 ' offs.Length ' 1 Until offs.Length
+	For Local i:= 0 Until InfTree.LTABLE_LENGTH ' offs.Length ' 16 ' 1 Until offs.Length
 		offs.SetUnsigned(i, sum) ' Set
 		
-		sum += t.lTable.Get(i) ' GetUnsigned
+		sum += t.lTable.GetUnsigned(i) ' GetUnsigned
 	Next
 	
 	#Rem ' If REGAL_INFLATE_DEBUG_OUTPUT
@@ -231,7 +231,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 		
 		len += 1
 		
-		Local offset:= t.lTable.Get(len) ' GetUnsigned
+		Local offset:= t.lTable.GetUnsigned(len) ' GetUnsigned
 		
 		sum += offset
 		cur -= offset
@@ -239,7 +239,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	
 	Local index:= (sum + cur)
 	
-	Local symbol:= t.transTable.Get(index) ' GetUnsigned
+	Local symbol:= t.transTable.GetUnsigned(index) ' GetUnsigned
 	
 	#If REGAL_INFLATE_DEBUG_OUTPUT
 		If (__dbg) Then
@@ -257,10 +257,12 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Optimization potential; dynamic allocations:
 	
 	' Allocate a temporary length-buffer.
-	Local lengths:= New ByteArrayView(286+32) ' IntArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
+	Local lengths:= New ByteArrayView(288+32) ' 286 ' IntArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
 	
 	' Set all entries of this buffer to zero.
-	'SetBuffer(lengths.Data, 0)
+	#If CONFIG = "debug"
+		lengths.Clear()
+	#End
 	
 	Local hlit:Int, hdist:Int, hclen:Int ' UInt, ...
 	
@@ -273,9 +275,9 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Get 4-bit HCLEN. (4-19)
 	hclen = inf_read_bits(d, 4, 4)
 	
-	For Local i:= 0 Until 19 ' clcidx.Length
-		lengths.Set(i, 0)
-	Next
+	#If CONFIG <> "debug"
+		lengths.Clear(0, 19) ' clcidx.Length
+	#End
 	
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
@@ -292,6 +294,8 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	Local num:= 0
 	
 	Local max_num:= (hlit + hdist)
+	
+	DebugStop()
 	
 	While (num < max_num)
 		' Load a symbol.
@@ -349,7 +353,7 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	inf_build_tree(dt, lengths, hdist, hlit)
 	
 	' With the trees built, discard our temporary length-buffer.
-	'lengths.Discard()
+	'lengths.Data.Discard()
 End
 
 ' ////// Block inflate functions \\\\\\

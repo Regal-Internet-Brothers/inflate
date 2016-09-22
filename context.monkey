@@ -21,7 +21,7 @@ Class InfContext
 		' Constant variable(s):
 		
 		' The type-adjusted lengths of the "bit" and "base" buffers used internally.
-		Const BIT_BASE_LENGTH:= 30
+		Const BIT_BASE_LENGTH:= 30 ' 31
 		
 		' Fields:
 		
@@ -35,6 +35,14 @@ Class InfContext
 	Public
 		' Constructor(s):
 		Method New()
+			#If CONFIG = "debug"
+				length_bits.Clear()
+				length_base.Clear()
+				
+				dist_bits.Clear()
+				dist_base.Clear()
+			#End
+			
 			#If REGAL_INFLATE_RUNTIME_TABLES
 				' Build extra bits and base tables:
 				inf_build_bits_base(length_bits, length_base, 4, 3)
