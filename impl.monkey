@@ -20,7 +20,7 @@ Public
 ' Implementation layer:
 
 ' Constant variable(s):
-Global clcidx:Int[] = [
+Global code_lengths_order:Int[] = [
 	16, 17, 18, 0, 8, 7, 9, 6,
 	10, 5, 11, 4, 12, 3, 13, 2,
 	14, 1, 15] ' Const ' (19 entries)
@@ -229,19 +229,19 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	hclen = d.ReadBits(4, 4)
 	
 	#If CONFIG <> "debug"
-		lengths.Clear(0, 19) ' clcidx.Length
+		lengths.Clear(0, 19) ' code_lengths_order.Length
 	#End
 	
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
 		' Read 3-bit code lengths. (0-7)
-		lengths.Set(clcidx[i], d.ReadBits(3, 0))
+		lengths.Set(code_lengths_order[i], d.ReadBits(3, 0))
 	Next
 	
 	' Build code length tree, temporarily use length tree.
 	Local code_tree:= New InfTree() ' lt
 	
-	inf_build_tree(code_tree, lengths, 19, 0) ' clcidx.Length
+	inf_build_tree(code_tree, lengths, 19, 0) ' code_lengths_order.Length
 	
 	' Decode code lengths for the dynamic trees:
 	Local num:= 0
