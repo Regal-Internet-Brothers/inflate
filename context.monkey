@@ -21,7 +21,7 @@ Class InfContext
 		' Constant variable(s):
 		
 		' The type-adjusted lengths of the "bit" and "base" buffers used internally.
-		Const BIT_BASE_LENGTH:= 30 ' 31
+		Const BIT_BASE_LENGTH:= 31 ' 30 ' 31
 		
 		' Fields:
 		

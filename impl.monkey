@@ -89,54 +89,122 @@ End
 
 ' Given an array of code lengths, build a tree.
 ' 'lengths' is a buffer containing byte values.
-Function inf_build_tree:Void(t:InfTree, lengths:ByteArrayView, num:Int, offset:Int, _dbg:Bool=False) ' offset:Int=0 ' Size_t ' Int[] ' Byte[] ' IntArrayView
-	' Optimization potential; dynamic allocation.
-	Local offs:= New ShortArrayView(InfTree.LTABLE_LENGTH) ' New Int[InfTree.LTABLE_LENGTH] ' 16 ' Short[] ' UShort[]
+Function inf_build_tree:Void(t:InfTree, lengths:IntArrayView, num:Int, _dbg:Bool=False) ' ByteArrayView
+	' Optimization potential; dynamic allocations:
+	'Local length_data:= New DataBuffer((16+16) * SizeOf_Short)
+	Local length_count:= New ShortArrayView(16) ' InfTree.LTABLE_LENGTH ' offs
+	Local first_code:= New ShortArrayView(16) ' ' InfTree.LTABLE_LENGTH
+	
+	Local __lens:= lengths.GetArray()
 	
 	' Clear the code lengths:
-	For Local i:= 0 Until InfTree.LTABLE_LENGTH ' t.lTable_Length ' offs.Length ' 16
-		t.lTable.Set(i, 0)
-	Next
+	length_count.Clear()
 	
 	' Scan symbol length, and sum code length counts:
-	'For Local i:= offset Until (offset+num)
 	For Local i:= 0 Until num
-		Local length:= lengths.GetUnsigned(i + offset) ' i ' Get
+		Local length:= lengths.GetUnsigned(i) ' i ' Get
 		
-		Local newValue:= (t.lTable.GetUnsigned(length) + 1) ' GetUnsigned
-		
-		' Increment by one.
-		t.lTable.Set(length, newValue)
+		If (length > 0) Then
+			' Increment by one.
+			length_count.Increment(length)
+		Endif
 	Next
 	
-	' Set the first entry to zero.
-	t.lTable.Set(0, 0)
+	Local __lencnt:= length_count.GetArray()
+	
+	'DebugStop()
 	
 	' Compute offset table for distribution sort:
-	Local sum:= 0
+	Local total_count:= 0
 	
-	For Local i:= 0 Until InfTree.LTABLE_LENGTH ' offs.Length ' 16 ' 1 Until offs.Length
-		offs.SetUnsigned(i, sum) ' Set
-		
-		sum += t.lTable.GetUnsigned(i) ' GetUnsigned
+	For Local i:= 1 Until 16 ' InfTree.LTABLE_LENGTH
+		total_count += length_count.GetUnsigned(i) ' GetUnsigned
 	Next
 	
-	#Rem ' If REGAL_INFLATE_DEBUG_OUTPUT
-		Print("BEGIN")
+	If (total_count = 0) Then
+		DebugStop()
 		
-		' Debugging related:
-		Local length_bytes:= New Int[lengths.Length-offset]
+		Return ' allow_no_symbols
+	Elseif (total_count = 1) Then
+		DebugStop()
 		
-		lengths.Data.PeekBytes(offset, length_bytes, 0, length_bytes.Length) ' PeekInts
+		For Local i:= 0 Until num
+			If (lengths.GetUnsigned(i) <> 0) Then
+				t.transTable.Set(1, i)
+				t.transTable.Set(0, t.transTable.Get(1))
+			Endif
+		Next
 		
-		If (_dbg) Then
+		DebugStop()
+		
+		Return ' 1
+	Endif
+	
+	' Set the first entry to zero.
+	first_code.SetUnsigned(0, 0) ' Set
+	
+	For Local i:= 1 Until 16
+		Local value:= Lsl((first_code.GetUnsigned(i - 1) + length_count.GetUnsigned(i - 1)), 1)
+		
+		first_code.SetUnsigned(i, value)
+		
+		If ((first_code.GetUnsigned(i) + length_count.GetUnsigned(i)) > Lsl(1, i)) Then
 			DebugStop()
+			
+			Return ' 0
 		Endif
-	#End
+	Next
+	
+	If ((first_code.GetUnsigned(15) + length_count.GetUnsigned(15)) <> Lsl(1, 15)) Then
+		DebugStop()
+		
+		Return ' 0
+	Endif
+	
+	Local __fcode:= first_code.GetArray()
+	
+	'DebugStop()
+	
+	Local index:= 0
+	
+	For Local i:= 1 Until 16
+		Local code_limit:= Lsl(1, i)
+		
+		Local next_code:= (first_code.GetUnsigned(i) + length_count.GetUnsigned(i))
+		Local next_index:= (index + (code_limit - first_code.GetUnsigned(i)))
+		
+		For Local j:= 0 Until num
+			If (lengths.GetUnsigned(j) = i) Then
+				'Local __trtab:= t.transTable.GetArray()
+				
+				'DebugStop()
+				
+				t.transTable.Set(index, j)
+				
+				index += 1
+			Endif
+		Next
+		
+		For Local j:= next_code Until code_limit
+			'Local __trtab:= t.transTable.GetArray()
+			
+			Local NEWVAL:= ~next_index
+			
+			'DebugStop()
+			
+			t.transTable.Set(index, NEWVAL)
+			
+			index += 1
+			next_index += 2
+		Next
+	Next
+	
+	
+	#Rem
 	
 	' Create code -> symbol translation table (Symbols sorted by code):
 	For Local i:= 0 Until num
-		Local length:= lengths.GetUnsigned(i + offset) ' 27 = index 7 ' Get
+		Local length:= lengths.Get(i) ' 27 = index 7 ' GetUnsigned
 		
 		'#If REGAL_INFLATE_DEBUG_OUTPUT
 			'Print("lengths[" + i + "]: " + length)
@@ -155,25 +223,49 @@ Function inf_build_tree:Void(t:InfTree, lengths:ByteArrayView, num:Int, offset:I
 		Endif
 	Next
 	
-	#If REGAL_INFLATE_DEBUG_OUTPUT
-		Print("END")
-		
-		If (_dbg) Then
-			DebugStop()
-		Endif
 	#End
 	
 	' Manually discard the offset-buffer.
-	offs.Data.Discard()
+	'offs.Data.Discard()
 End
 
 ' ////// Decode functions \\\\\\
 
 ' Given a data stream and a tree, decode a symbol.
 Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
+	Local bits_used:= 0
+	Local index:= 0
+	
+	If (__dbg) Then
+		DebugStop()
+	Endif
+	
+	Repeat
+		Local bit:= d.GetBit()
+		
+		index += bit
+		
+		If (t.transTable.Get(index) >= 0) Then
+			Exit
+		Endif
+		
+		index = ~t.transTable.Get(index)
+	Forever
+	
+	Local value:= t.transTable.Get(index)
+	
+	If (__dbg) Then
+		Print("[" + index + "]: " + value)
+	Endif
+	
+	Return value
+	
+	#Rem
 	Local sum:= 0
 	Local cur:= 0
 	Local len:= 0
+	
+	'DebugStop()
 	
 	#If REGAL_INFLATE_DEBUG_OUTPUT
 		'Print("Decoding symbol...")
@@ -184,7 +276,7 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 		
 		len += 1
 		
-		Local offset:= t.lTable.GetUnsigned(len) ' GetUnsigned
+		Local offset:= t.lTable.GetUnsigned(len) ' Get
 		
 		sum += offset
 		cur -= offset
@@ -192,17 +284,18 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	
 	Local index:= (sum + cur)
 	
-	Local symbol:= t.transTable.GetUnsigned(index) ' GetUnsigned
+	Local symbol:= t.transTable.Get(index)
 	
-	#If REGAL_INFLATE_DEBUG_OUTPUT
+	'#If REGAL_INFLATE_DEBUG_OUTPUT
 		If (__dbg) Then
 			'DebugStop()
 			
 			Print("Retrieving symbol from trans[" + index + "] = {" + symbol + "}")
 		Endif
-	#End
+	'#End
 	
 	Return symbol
+	#End
 End
 
 ' Given a data stream, decode dynamic trees from it.
@@ -210,12 +303,8 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Optimization potential; dynamic allocations:
 	
 	' Allocate a temporary length-buffer.
-	Local lengths:= New ByteArrayView(288+32) ' 286 ' IntArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
-	
-	' Set all entries of this buffer to zero.
-	#If CONFIG = "debug"
-		lengths.Clear()
-	#End
+	'Local lengths:= New ByteArrayView(288) ' +32 ' 286 ' IntArrayView ' New Int[288+32] ' (InfTree.TRANSTABLE_LENGTH + (InfTree.LTABLE_LENGTH * 2)) ' Byte[] ' 288+32 (320)
+	'Local dists:= New ByteArrayView(32) ' 31
 	
 	Local hlit:Int, hdist:Int, hclen:Int ' UInt, ...
 	
@@ -228,29 +317,72 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 	' Get 4-bit HCLEN. (4-19)
 	hclen = d.ReadBits(4, 4)
 	
-	#If CONFIG <> "debug"
-		lengths.Clear(0, 19) ' code_lengths_order.Length
+	' Set entries of the length buffer(s) to zero:
+	'dists.Clear()
+	
+	#If CONFIG = "debug"
+		'lengths.Clear()
 	#End
+	
+	' Build code length tree, temporarily use length tree.
+	Local code_tree:= New InfTree(InfTree.TYPE_CODE, True) ' lt
 	
 	' Read code lengths for code length alphabet:
 	For Local i:= 0 Until hclen
-		' Read 3-bit code lengths. (0-7)
-		lengths.Set(code_lengths_order[i], d.ReadBits(3, 0))
+		code_tree.lTable.Set(code_lengths_order[i], d.ReadBits(3, 0))
 	Next
 	
-	' Build code length tree, temporarily use length tree.
-	Local code_tree:= New InfTree() ' lt
+	#Rem
+		Local _test:= 0
+		
+		While (_test < hclen)
+			' Read 3-bit code lengths. (0-7)
+			code_tree.lTable.Set(code_lengths_order[_test], d.ReadBits(3, 0))
+			
+			_test += 1
+		Wend
+		
+		While (_test < 19)
+			code_tree.lTable.Set(code_lengths_order[_test], 0)
+			
+			_test += 1
+		Wend
+	#End
 	
-	inf_build_tree(code_tree, lengths, 19, 0) ' code_lengths_order.Length
+	'DebugStop()
 	
-	' Decode code lengths for the dynamic trees:
-	Local num:= 0
+	Local in_pos:= d.source.Position
+	Local out_pos:= d.destination.Position
 	
-	Local max_num:= (hlit + hdist)
+	inf_build_tree(code_tree, code_tree.lTable, 19) ' code_lengths_order.Length
+	
+	in_pos = d.source.Position
+	out_pos = d.destination.Position
+	
+	Local code_l:= code_tree.lTable.GetArray()
+	Local code_t:= code_tree.transTable.GetArray()
+	
+	'DebugStop()
+	
+	inf_decode_trees_impl(code_tree, d, lt.lTable, hlit)
+	inf_decode_trees_impl(code_tree, d, dt.lTable, hdist)
+	
+	' Build dynamic tree:
+	
+	' Build literal lengths.
+	inf_build_tree(lt, lt.lTable, hlit, True) ' 1
+	
+	' Build distance codes.
+	inf_build_tree(dt, dt.lTable, hdist)
+End
+
+Function inf_decode_trees_impl:Void(code_tree:InfTree, d:InfSession, lengths:IntArrayView, count:Int, offset:Int=0) ' ByteArrayView
+	Local num:= offset
 	
 	DebugStop()
 	
-	While (num < max_num)
+	' Decode code lengths for the dynamic trees:
+	While (num < count)
 		' Load a symbol.
 		Local sym:= inf_decode_symbol(d, code_tree)
 		
@@ -296,30 +428,19 @@ Function inf_decode_trees:Void(d:InfSession, lt:InfTree, dt:InfTree)
 				num += 1
 		End Select
 	Wend
-	
-	' Build dynamic treee:
-	
-	' Build literal lengths.
-	inf_build_tree(lt, lengths, hlit, 0, True) ' 1
-	
-	' Build distance codes.
-	inf_build_tree(dt, lengths, hdist, hlit)
-	
-	' With the trees built, discard our temporary length-buffer.
-	'lengths.Data.Discard()
 End
 
 ' ////// Block inflate functions \\\\\\
 
 ' Given a stream and two trees, inflate a block of data.
 Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree, dt:InfTree)
-	#If REGAL_INFLATE_DEBUG_OUTPUT
-		If (d.destination.Position > 256) Then ' 256 = 255 (Zero added for some reason)
-			'DebugStop()
-		Endif
-		
-		DebugStop()
-	#End
+	Local real_pos:= d.destination.Position
+	
+	If (real_pos Mod 256 = 0) Then ' real_pos <> 0
+		'DebugStop()
+	Endif
+	
+	'DebugStop()
 	
 	If (d.curlen = 0) Then
 		#If REGAL_INFLATE_DEBUG_OUTPUT
@@ -328,9 +449,17 @@ Function inf_inflate_block_data:Int(context:InfContext, d:InfSession, lt:InfTree
 		
 		Local sym:= inf_decode_symbol(d, lt, True)
 		
-		#If REGAL_INFLATE_DEBUG_OUTPUT
-			Print("Huffman symbol: " + sym)
-		#End
+		'#If REGAL_INFLATE_DEBUG_OUTPUT
+			'Print("Huffman symbol: " + sym)
+		'#End
+		
+		'DebugStop()
+		
+		If (sym = 0) Then ' 256 = 255 (Zero added for some reason)
+			'Print("POSITION: " + real_pos)
+			
+			DebugStop()
+		Endif
 		
 		' Literal value:
 		If (sym < 256) Then
@@ -407,8 +536,12 @@ Function inf_inflate_uncompressed_block:Int(__context:InfContext, d:InfSession)
 		Local length:Int, invLength:Int ' UInt
 		
 		' Get the length:
-		'length = d.source.ReadShort()
-		'invLength = d.source.ReadShort()
+		length = d.source.ReadShort()
+		invLength = d.source.ReadShort()
+		
+		Local pos:= d.source.Position
+		
+		DebugStop()
 		
 		' This may not be endian-coherent, but it works:
 		length = (d.ReadByte() + 256 * d.ReadByte())
@@ -444,6 +577,10 @@ End
 Function inf_begin_block:Void(d:InfSession)
 	' Read the final block flag.
 	d.bFinal = d.GetBit() ' > 0
+	
+	If (d.bFinal) Then
+		DebugStop()
+	Endif
 	
 	' Read the block type. (2 bits)
 	d.bType = d.ReadBits(2, 0)

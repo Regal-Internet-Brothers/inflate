@@ -143,16 +143,13 @@ Class InfSession ' Final
 		Method Put:Void(value:Int)
 			#If REGAL_INFLATE_DEBUG_OUTPUT
 				Print("PUT: " + value + "   {Dest: " + destination.Position + ", Src: " + source.Position + "}")
-				
-				'If (destination.Position = 1) Then
-				If (value = 0) Then
-					DebugStop()
-				Endif
-				
-				'DebugStop()
 			#End
 			
 			value = WriteByte(value)
+			
+			If (destination.Position >= 256*104-2 And value = 30) Then
+				DebugStop()
+			Endif
 			
 			If (dict_ring) Then ' <> Null
 				dict_ring.PokeByte(dict_idx, value)
@@ -283,8 +280,8 @@ Class InfSession ' Final
 		Field dict_idx:Int = 0 ' UInt
 		
 		' Trees:
-		Field lTree:InfTree = New InfTree()
-		Field dTree:InfTree = New InfTree()
+		Field lTree:InfTree = New InfTree(InfTree.TYPE_LITERAL)
+		Field dTree:InfTree = New InfTree(InfTree.TYPE_DISTANCE)
 		
 		' Properties:
 		Method dict_size:Int() Property ' UInt

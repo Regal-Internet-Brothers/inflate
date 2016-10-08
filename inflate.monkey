@@ -34,6 +34,8 @@ Function Inflate:Int(context:InfContext, d:InfSession) ' sourceLen:Int ' uncompr
 		' Process the current block:
 		Select (d.bType)
 			Case 0
+				DebugStop()
+				
 				' "Inflate" uncompressed block.
 				res = inf_inflate_uncompressed_block(context, d)
 			Case 1, 2
