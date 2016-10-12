@@ -236,7 +236,11 @@ Function inf_decode_symbol:Int(d:InfSession, t:InfTree, __dbg:Bool=False)
 	Local bits_used:= 0
 	Local index:= 0
 	
+	Local _trans:Int[]
+	
 	If (__dbg) Then
+		_trans = t.transTable.GetArray()
+		
 		DebugStop()
 	Endif
 	
@@ -379,7 +383,7 @@ End
 Function inf_decode_trees_impl:Void(code_tree:InfTree, d:InfSession, lengths:IntArrayView, count:Int, offset:Int=0) ' ByteArrayView
 	Local num:= offset
 	
-	DebugStop()
+	'DebugStop()
 	
 	' Decode code lengths for the dynamic trees:
 	While (num < count)

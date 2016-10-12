@@ -131,7 +131,7 @@ Class InfSession ' Final
 		
 		' This directly writes a byte to the 'destination' stream.
 		Method WriteByte:Int(value:Int)
-			Local out_value:= (value & $FF)
+			Local out_value:= value ' (value & $FF)
 			
 			destination.WriteByte(out_value)
 			
@@ -146,10 +146,6 @@ Class InfSession ' Final
 			#End
 			
 			value = WriteByte(value)
-			
-			If (destination.Position >= 256*104-2 And value = 30) Then
-				DebugStop()
-			Endif
 			
 			If (dict_ring) Then ' <> Null
 				dict_ring.PokeByte(dict_idx, value)
